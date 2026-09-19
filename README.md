@@ -7,6 +7,8 @@ YT Time Saver is a small Chrome extension that puts a cover over videos that loo
 Hit **Show anyway** whenever you want to watch one.
 You still get the final say.
 
+![YT Time Saver demo](assets/gif123.gif)
+
 ## Try it
 
 You'll need Chrome and your own [TypeSafe API key](https://console.typesafe.ai/keys).
