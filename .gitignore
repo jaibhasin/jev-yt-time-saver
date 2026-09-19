@@ -1,0 +1,24 @@
+# Local agent instructions and tooling state
+AGENTS.md
+.gstack/
+
+# Local screenshots and visual test captures
+Screenshot *.png
+_shot*.png
+
+# Dependencies and generated output
+node_modules/
+dist/
+coverage/
+
+# Environment files and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# macOS and editor files
+.DS_Store
+.vscode/
+.idea/
+*.swp
