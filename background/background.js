@@ -196,7 +196,10 @@ function shouldFlag(result, settings) {
 // with title + channel only.
 
 async function fetchDescription(videoId) {
-  const url = "https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
+  // YouTube may reject this unauthenticated metadata request. That is fine:
+  // classification falls back to the title and channel. Never commit a
+  // Google/YouTube client key to a public extension repository.
+  const url = "https://www.youtube.com/youtubei/v1/player";
   const body = {
     context: {
       client: {
