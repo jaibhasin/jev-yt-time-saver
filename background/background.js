@@ -36,6 +36,18 @@ const DEFAULTS = {
 const CLASSIFIER_VERSION = 2;
 const CACHE_MAX_ENTRIES = 600;  // Don't let the cache grow forever.
 const CACHE_TTL_MS = 30 * 60 * 1000; // Re-classify after 30 minutes.
+const REQUEST_TIMEOUT_MS = 15000;
+
+/** Keep a slow YouTube or TypeSafe request from outliving the service worker. */
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -194,7 +206,7 @@ async function fetchDescription(videoId) {
     },
     videoId,
   };
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -247,7 +259,7 @@ async function classify(video) {
 
   let data;
   try {
-    const res = await fetch(API_URL, {
+    const res = await fetchWithTimeout(API_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${settings.apiKey}`,

@@ -222,8 +222,18 @@ function processItem(item) {
       return;
     }
 
-    chrome.runtime
-      .sendMessage({ type: "classify", payload: video })
+    // Use the callback form so this also works in browsers that do not fully
+    // support the Promise form of chrome.runtime.sendMessage in MV3.
+    new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: "classify", payload: video }, (result) => {
+        const error = chrome.runtime.lastError;
+        if (error) {
+          reject(new Error(error.message));
+          return;
+        }
+        resolve(result);
+      });
+    })
       .then((result) => {
         console.log(
           "[YT Time Saver] result",
