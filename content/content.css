@@ -4,38 +4,76 @@
    These styles are only applied to elements the content script marks with the
    class `.yt-time-saver-flagged`. They visually "dull" a video we think is
    wasting your time and add a small timeout (⏰) badge on the corner.
+
+   We use `!important` on a few declarations because YouTube's own CSS is very
+   specific and would otherwise override our dimming.
    ========================================================================== */
 
-/* Dim + desaturate the thumbnail of a flagged video so it recedes visually.
-   `filter` brightens/dulls and `opacity` fades it, making it feel "off limits". */
-.yt-time-saver-flagged ytd-thumbnail,
-.yt-time-saver-flagged ytd-thumbnail img {
-  opacity: 0.4;
-  filter: grayscale(0.6) saturate(0.5);
-  transition: opacity 0.3s ease, filter 0.3s ease;
-}
-
-/* The video card needs to be a positioning context so the badge can sit on
-   top of it (YouTube's grid items aren't position:relative by default). */
+/* Make the flagged card a positioning context for the badge. */
 .yt-time-saver-flagged {
   position: relative !important;
 }
 
-/* The timeout badge pinned to the top-right corner of the card. A red ring on
-   a dark disc echoes a "stop / out of time" indicator. */
+/* -------------------------------------------------------------------------
+   Dimming: aggressively fade + desaturate the thumbnail so the video
+   visually recedes. We target the thumbnail host element directly.
+   ------------------------------------------------------------------------- */
+.yt-time-saver-flagged ytd-thumbnail {
+  opacity: 0.22 !important;
+  filter: grayscale(0.85) brightness(0.55) !important;
+  transition: opacity 0.25s ease, filter 0.25s ease !important;
+}
+
+/* Some feeds render the actual image with inline styles; force it dim too. */
+.yt-time-saver-flagged ytd-thumbnail img,
+.yt-time-saver-flagged ytd-thumbnail .yt-img-shadow {
+  opacity: 0.85 !important;
+  filter: grayscale(0.7) !important;
+}
+
+/* Optional hover: let the user peek at a slightly brighter thumbnail when
+   they hover, so they can still decide to click if they want. */
+.yt-time-saver-flagged:hover ytd-thumbnail {
+  opacity: 0.55 !important;
+  filter: grayscale(0.45) brightness(0.75) !important;
+}
+
+/* -------------------------------------------------------------------------
+   The timeout badge pinned to the top-right corner of the card.
+   A red ring on a dark disc echoes a "stop / out of time" indicator.
+   ------------------------------------------------------------------------- */
 .yt-time-saver-badge {
   position: absolute;
   top: 8px;
   right: 8px;
-  z-index: 9999;
-  font-size: 22px;
+  z-index: 2147483647; /* max safe z-index so it floats above everything */
+  font-size: 26px;
   line-height: 1;
-  background: rgba(0, 0, 0, 0.75);
-  border: 2px solid #ff3b30;
+  background: rgba(0, 0, 0, 0.82);
+  border: 2.5px solid #ff3b30;
   border-radius: 50%;
-  padding: 5px 5px 3px 5px; /* slight offset so the emoji sits centred */
+  padding: 6px 6px 4px 6px; /* slight offset so the emoji sits centred */
   color: #fff;
   cursor: help;
   user-select: none;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  animation: yt-time-saver-pulse 2s ease-in-out infinite;
+}
+
+/* Subtle pulse on the badge so it catches the eye without being annoying. */
+@keyframes yt-time-saver-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+/* -------------------------------------------------------------------------
+   Compact sidebar cards are smaller; scale the badge down so it doesn't
+   cover the whole thumbnail.
+   ------------------------------------------------------------------------- */
+ytd-compact-video-renderer.yt-time-saver-flagged .yt-time-saver-badge {
+  font-size: 18px;
+  padding: 4px 4px 2px 4px;
+  top: 4px;
+  right: 4px;
 }
