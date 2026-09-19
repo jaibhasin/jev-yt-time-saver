@@ -31,8 +31,9 @@
   color: #f1f1f1;
   text-align: center;
   background:
-    radial-gradient(circle at 50% 35%, rgba(70, 28, 28, 0.32), transparent 48%),
-    rgba(15, 15, 15, 0.97);
+    radial-gradient(circle at 50% 35%, rgba(70, 28, 28, 0.24), transparent 48%),
+    rgba(15, 15, 15, 0.89);
+  backdrop-filter: blur(4px) saturate(0.72);
   border: 1px solid rgba(255, 78, 68, 0.68);
   border-radius: 12px;
   box-sizing: border-box;
