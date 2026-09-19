@@ -1,5 +1,6 @@
 # YT Time Saver
 YT Time Saver is a Chrome extension that puts a cover over videos that look more distracting than useful, powered by [Jev from TypeSafe](https://docs.typesafe.ai/introduction).
+
 ![YT Time Saver demo](assets/gif123.gif)
 
 ## quick install
