@@ -17,6 +17,13 @@
 
 /* The high z-index keeps the shield above YouTube's menus and thumbnail UI. */
 .yt-time-saver-shield {
+  --yts-surface: rgba(14, 20, 17, 0.52);
+  --yts-surface-raised: rgba(255, 255, 255, 0.14);
+  --yts-surface-hover: rgba(255, 255, 255, 0.2);
+  --yts-border: rgba(222, 240, 229, 0.24);
+  --yts-text: #f3f8f5;
+  --yts-text-muted: #d2ddd6;
+  --yts-accent: #8bd3aa;
   position: absolute;
   inset: 0;
   z-index: 2147483647;
@@ -24,19 +31,20 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 14px;
   min-height: 168px;
-  padding: 24px;
+  padding: 24px 22px;
   overflow: hidden;
-  color: #f1f1f1;
+  color: var(--yts-text);
   text-align: center;
-  background:
-    radial-gradient(circle at 50% 35%, rgba(70, 28, 28, 0.24), transparent 48%),
-    rgba(15, 15, 15, 0.89);
-  border: 1px solid rgba(255, 78, 68, 0.68);
-  border-radius: 12px;
+  background: var(--yts-surface);
+  backdrop-filter: saturate(0.55) brightness(0.72);
+  border: 1px solid var(--yts-border);
+  border-radius: 14px;
   box-sizing: border-box;
-  box-shadow: inset 0 3px 0 rgba(255, 59, 48, 0.9);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   user-select: none;
   cursor: default;
 }
@@ -44,13 +52,14 @@
 /* A CSS clock stays crisp and avoids a visually noisy emoji. */
 .yt-time-saver-clock {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   flex: 0 0 auto;
-  border: 3px solid #ff4e44;
+  background: rgba(139, 211, 170, 0.14);
+  border: 2px solid var(--yts-accent);
   border-radius: 50%;
   box-sizing: border-box;
-  box-shadow: 0 0 0 5px rgba(255, 78, 68, 0.12);
+  box-shadow: 0 0 0 6px rgba(139, 211, 170, 0.08);
 }
 
 .yt-time-saver-clock::before,
@@ -60,7 +69,7 @@
   left: 50%;
   bottom: 50%;
   width: 2px;
-  background: #f1f1f1;
+  background: var(--yts-text);
   border-radius: 2px;
   transform-origin: 50% 100%;
 }
@@ -79,62 +88,70 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  max-width: 280px;
+  gap: 5px;
+  max-width: 290px;
 }
 
 .yt-time-saver-label {
-  color: #ff817a;
-  font-family: Roboto, Arial, sans-serif;
+  color: var(--yts-accent);
+  font-family: "YouTube Sans", Roboto, Arial, sans-serif;
   font-size: 10px;
   font-weight: 700;
   line-height: 1.2;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
 }
 
 .yt-time-saver-title {
-  color: #fff;
-  font-family: Roboto, Arial, sans-serif;
-  font-size: 18px;
-  font-weight: 700;
+  color: var(--yts-text);
+  font-family: "YouTube Sans", Roboto, Arial, sans-serif;
+  font-size: 19px;
+  font-weight: 600;
   line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
 }
 
 .yt-time-saver-explanation {
-  color: #aaa;
-  font-family: Roboto, Arial, sans-serif;
-  font-size: 13px;
+  color: var(--yts-text-muted);
+  font-family: "YouTube Sans", Roboto, Arial, sans-serif;
+  font-size: 14px;
   font-weight: 400;
-  line-height: 1.35;
+  line-height: 1.4;
+  text-wrap: balance;
 }
 
 .yt-time-saver-reveal {
-  min-width: 116px;
-  min-height: 40px;
-  padding: 0 16px;
-  color: #f1f1f1;
-  font-family: Roboto, Arial, sans-serif;
+  min-width: 122px;
+  min-height: 44px;
+  padding: 0 18px;
+  color: var(--yts-text);
+  font-family: "YouTube Sans", Roboto, Arial, sans-serif;
   font-size: 13px;
   font-weight: 600;
   line-height: 1;
-  background: #272727;
-  border: 1px solid #5f5f5f;
-  border-radius: 20px;
+  background: var(--yts-surface-raised);
+  border: 1px solid rgba(222, 240, 229, 0.28);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   cursor: pointer;
-  transition: background-color 140ms ease-out, border-color 140ms ease-out;
+  transition:
+    background-color 140ms ease-out,
+    border-color 140ms ease-out,
+    transform 100ms ease-out;
 }
 
 .yt-time-saver-reveal:hover {
-  background: #3a3a3a;
-  border-color: #8a8a8a;
+  background: var(--yts-surface-hover);
+  border-color: rgba(222, 240, 229, 0.42);
 }
 
 .yt-time-saver-reveal:active {
-  background: #1f1f1f;
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(1px);
 }
 
 .yt-time-saver-reveal:focus-visible {
-  outline: 3px solid #3ea6ff;
+  outline: 3px solid var(--yts-accent);
   outline-offset: 3px;
 }
 
@@ -143,17 +160,17 @@
    ------------------------------------------------------------------------- */
 ytd-compact-video-renderer.yt-time-saver-flagged .yt-time-saver-shield {
   flex-direction: row;
-  gap: 10px;
+  gap: 11px;
   min-height: 94px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 10px 11px;
+  border-radius: 10px;
 }
 
 ytd-compact-video-renderer .yt-time-saver-clock {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-width: 2px;
-  box-shadow: 0 0 0 3px rgba(255, 78, 68, 0.12);
+  box-shadow: 0 0 0 4px rgba(139, 211, 170, 0.08);
 }
 
 ytd-compact-video-renderer .yt-time-saver-clock::before {
@@ -181,9 +198,9 @@ ytd-compact-video-renderer .yt-time-saver-title {
 }
 
 ytd-compact-video-renderer .yt-time-saver-reveal {
-  min-width: 94px;
-  min-height: 36px;
-  padding: 0 12px;
+  min-width: 96px;
+  min-height: 40px;
+  padding: 0 13px;
   font-size: 12px;
 }
 
@@ -198,7 +215,7 @@ ytd-shorts-lockup-view-model.yt-time-saver-flagged {
 ytd-shorts-lockup-view-model.yt-time-saver-flagged .yt-time-saver-shield {
   min-height: 0;
   padding: 16px;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 ytd-shorts-lockup-view-model .yt-time-saver-shield .yt-time-saver-copy {
@@ -206,9 +223,9 @@ ytd-shorts-lockup-view-model .yt-time-saver-shield .yt-time-saver-copy {
 }
 
 ytd-shorts-lockup-view-model .yt-time-saver-reveal {
-  min-width: 104px;
-  min-height: 36px;
-  padding: 0 12px;
+  min-width: 110px;
+  min-height: 42px;
+  padding: 0 14px;
   font-size: 12px;
 }
 
