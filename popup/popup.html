@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #0f1120;
+        color: #e6e8f0;
+        width: 240px;
+        margin: 0;
+        padding: 16px;
+      }
+      h1 { font-size: 15px; margin: 0 0 12px; }
+      .row { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; }
+      .status { font-size: 13px; color: #9aa1b7; }
+      .ok { color: #2ecc71; }
+      .warn { color: #ff3b30; }
+      button { background: #ff3b30; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-size: 13px; cursor: pointer; width: 100%; margin-top: 10px; }
+      a { color: #ff3b30; font-size: 12px; text-decoration: none; display: block; margin-top: 10px; }
+      .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+      .switch input { opacity: 0; width: 0; height: 0; }
+      .slider { position: absolute; inset: 0; background: #3a3f56; border-radius: 22px; transition: 0.2s; }
+      .slider::before { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: 0.2s; }
+      input:checked + .slider { background: #2ecc71; }
+      input:checked + .slider::before { transform: translateX(18px); }
+    </style>
+  </head>
+  <body>
+    <h1>YT Time Saver</h1>
+
+    <div class="row">
+      <span class="status">Extension</span>
+      <label class="switch">
+        <input type="checkbox" id="enabled" />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="row">
+      <span class="status">API key</span>
+      <span id="key-status" class="warn">not set</span>
+    </div>
+
+    <button id="options">Settings</button>
+    <a href="#" id="close">Close</a>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,295 @@
+// ============================================================================
+// background.js  —  Service Worker
+// ----------------------------------------------------------------------------
+// This is the "engine room" of the extension. It runs in the background and
+// never touches the YouTube page directly. The content script (content.js)
+// collects video info from the page and sends it here. This file:
+//
+//   1. Reads the user's settings + API key (stored by the options page).
+//   2. Calls the TypeSafe "System One" API to classify each video.
+//   3. Turns the structured answers into a single "time-waste" score.
+//   4. Caches results so we don't re-classify the same video twice.
+//   5. Returns the verdict to the content script, which does the visual work.
+//
+// Why put the API call here and not in the content script?
+//   - The API key never lives on the YouTube page, so it stays safer.
+//   - The service worker can fetch cross-origin (it has host_permissions).
+//   - It centralises the scoring/caching logic in one place.
+// ============================================================================
+
+const API_URL = "https://api.typesafe.ai/v1/systemone";
+const MODEL = "jev-latest"; // TypeSafe's flagship System One model.
+
+// Default settings used when nothing is saved yet. The options page overwrites
+// these in chrome.storage.local.
+const DEFAULTS = {
+  enabled: true,            // Master on/off switch for the whole extension.
+  apiKey: "",               // TypeSafe API key (paste in the options page).
+  threshold: 0.6,           // A video is flagged when its waste score >= this.
+  confidenceMin: 0.5,       // We only trust/act when confidence >= this.
+  fetchDescription: true,   // Best-effort fetch of the description (home feed hides it).
+};
+
+// Cache tuning. We keep classifications in chrome.storage.session so they
+// survive service-worker restarts within the same browser session (and are
+// cleared when the browser closes).
+const CACHE_MAX_ENTRIES = 600;  // Don't let the cache grow forever.
+const CACHE_TTL_MS = 30 * 60 * 1000; // Re-classify after 30 minutes.
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+/** Read the saved settings from chrome.storage.local, merged with defaults. */
+async function getSettings() {
+  return chrome.storage.local.get(DEFAULTS);
+}
+
+// ---------------------------------------------------------------------------
+// Cache
+// ---------------------------------------------------------------------------
+
+/**
+ * Load the whole classification cache as a plain object keyed by videoId.
+ * Each entry looks like: { waste, confidence, flagged, ts }
+ */
+async function getCache() {
+  const data = await chrome.storage.session.get("cache");
+  return data.cache || {};
+}
+
+/** Save the cache back to chrome.storage.session, capping its size. */
+async function setCache(cache) {
+  const keys = Object.keys(cache);
+  if (keys.length > CACHE_MAX_ENTRIES) {
+    // Drop the oldest entries first (oldest `ts`).
+    keys
+      .sort((a, b) => (cache[a].ts || 0) - (cache[b].ts || 0))
+      .slice(0, keys.length - CACHE_MAX_ENTRIES)
+      .forEach((k) => delete cache[k]);
+  }
+  await chrome.storage.session.set({ cache });
+}
+
+// ---------------------------------------------------------------------------
+// TypeSafe request + scoring
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the `state` (the text a video is judged against). This is the raw
+ * material Jev reads. When the description is empty (common on the home feed),
+ * the content script may not have it, so we fetch it below.
+ */
+function buildState(video) {
+  const parts = [];
+  if (video.title) parts.push(`Title: ${video.title}`);
+  if (video.channel) parts.push(`Channel: ${video.channel}`);
+  if (video.description) parts.push(`Description: ${video.description}`);
+  return parts.join("\n");
+}
+
+/**
+ * The questions we ask Jev in ONE call. Asking them together evaluates all of
+ * them in parallel against the same state — adding more questions barely
+ * changes the response time or cost.
+ *
+ * We split "is this a time-waster?" into three atomic judgments and combine
+ * them in code (the "composite scoring" pattern from the TypeSafe docs):
+ *   - clickbait  -> is the framing manipulative?  (Noul = yes/no probability)
+ *   - slop       -> is it low-effort/recycled/AI filler? (Noul)
+ *   - value      -> how much genuine value does it have? (Score 0..3)
+ */
+function buildQuestions() {
+  return {
+    clickbait: {
+      type: "noul",
+      instructions:
+        "The title uses clickbait, sensationalised, or manipulative framing that oversells the content.",
+    },
+    slop: {
+      type: "noul",
+      instructions:
+        "This is low-effort, repetitive, recycled, or AI-generated filler content (\"slop\") that adds little original value.",
+    },
+    value: {
+      type: "score",
+      instructions:
+        "How much genuine informative, educational, or original value does this content offer?",
+      criteria: [
+        "Pure entertainment, fluff, or filler with almost no substance",
+        "Some substance but shallow, generic, or derivative",
+        "Genuinely informative, educational, or thoughtful",
+        "High-quality, in-depth, original, and worth the time",
+      ],
+    },
+  };
+}
+
+/**
+ * Turn the TypeSafe answers into a single 0..1 "time-waste" score.
+ *
+ * Weights let you control how much each signal matters. We pick:
+ *   - value (inverted): the lower the value, the more it looks like a time-waster.
+ *   - clickbait / slop : strong signals that a video is trying to waste time.
+ *
+ * `confidence` comes from the `value` Score answer and tells us how certain
+ * Jev is. We use it to avoid acting on guesses (highlighting the docs' lesson:
+ * "I don't know" is a useful signal).
+ */
+function computeWaste(answers) {
+  const clickbait = answers.clickbait ? answers.clickbait.noul : 0;
+  const slop = answers.slop ? answers.slop.noul : 0;
+
+  const valueAnswer = answers.value;
+  const valueMax = valueAnswer && valueAnswer.legend
+    ? Object.keys(valueAnswer.legend).length - 1
+    : 3;
+  const valueScore = valueAnswer ? valueAnswer.score : 0;
+  const lowValue = 1 - valueScore / valueMax; // 0 = great, 1 = worthless.
+
+  // Weighted blend of the three signals.
+  const waste = lowValue * 0.35 + clickbait * 0.35 + slop * 0.3;
+  const confidence = valueAnswer && valueAnswer.confidence != null
+    ? valueAnswer.confidence
+    : 0.5;
+
+  return { waste, confidence };
+}
+
+/** Decide whether a video should be flagged, based on the user's thresholds. */
+function shouldFlag(result, settings) {
+  return (
+    result.waste >= settings.threshold &&
+    result.confidence >= settings.confidenceMin
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Description fetching (best-effort)
+// ---------------------------------------------------------------------------
+//
+// On YouTube's home feed, video cards DON'T render the description in the DOM,
+// so the content script often has an empty description. To get it we ask
+// YouTube's own (un-official) "innertube" player API for the video metadata.
+// This is optional and wrapped in try/catch — if it fails we simply continue
+// with title + channel only.
+
+async function fetchDescription(videoId) {
+  const url = "https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
+  const body = {
+    context: {
+      client: {
+        clientName: "WEB",
+        clientVersion: "2.20240101.00.00",
+      },
+    },
+    videoId,
+  };
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data && data.videoDetails && data.videoDetails.shortDescription
+    ? data.videoDetails.shortDescription
+    : null;
+}
+
+// ---------------------------------------------------------------------------
+// Classify one video
+// ---------------------------------------------------------------------------
+
+/**
+ * The main workhorse: given a video object, return a verdict.
+ * Returns { status, flagged, waste, confidence } or { status: "no-key" }.
+ */
+async function classify(video) {
+  const settings = await getSettings();
+
+  // If the user disabled the extension or hasn't added a key, do nothing.
+  if (!settings.enabled) return { status: "disabled", flagged: false };
+  if (!settings.apiKey) return { status: "no-key", flagged: false };
+
+  // Short-circuit on a cached verdict so scrolling back doesn't re-call the API.
+  const cache = await getCache();
+  const cached = cache[video.videoId];
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return { status: "cache", flagged: cached.flagged, waste: cached.waste, confidence: cached.confidence };
+  }
+
+  // Try to fill in a missing description when the user allowed it.
+  let description = video.description;
+  if (!description && settings.fetchDescription) {
+    try {
+      const fetched = await fetchDescription(video.videoId);
+      if (fetched) description = fetched;
+    } catch (_) {
+      /* ignore — title + channel is still a useful fallback */
+    }
+  }
+
+  const state = buildState({ ...video, description });
+
+  let data;
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${settings.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        state,
+        questions: buildQuestions(),
+      }),
+    });
+
+    if (res.status === 401) return { status: "bad-key", flagged: false };
+    if (!res.ok) return { status: "error", flagged: false };
+
+    data = await res.json();
+  } catch (_) {
+    // Network error or the service worker's fetch failed. Don't flag anything.
+    return { status: "network-error", flagged: false };
+  }
+
+  const answers = data.answers || {};
+  const result = computeWaste(answers);
+  const flagged = shouldFlag(result, settings);
+
+  // Remember this verdict for later.
+  const entry = {
+    waste: result.waste,
+    confidence: result.confidence,
+    flagged,
+    ts: Date.now(),
+  };
+  cache[video.videoId] = entry;
+  await setCache(cache);
+
+  return { status: "ok", flagged, waste: result.waste, confidence: result.confidence };
+}
+
+// ---------------------------------------------------------------------------
+// Message router
+// ---------------------------------------------------------------------------
+// The content script posts messages here. We reply via sendResponse and return
+// `true` to keep the message channel open for the async reply.
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message && message.type === "classify") {
+    classify(message.payload)
+      .then((result) => sendResponse(result))
+      .catch(() => sendResponse({ status: "error", flagged: false }));
+    return true; // async — we'll call sendResponse later.
+  }
+  if (message && message.type === "getStatus") {
+    getSettings().then((s) =>
+      sendResponse({ enabled: s.enabled, hasApiKey: !!s.apiKey })
+    );
+    return true;
+  }
+});
