@@ -54,23 +54,43 @@ function getVideoId(anchor) {
  * the element isn't actually a video (e.g. a channel card or an ad).
  */
 function extractVideo(item) {
-  // The thumbnail/click target is the reliable source of the video id.
-  const link =
-    item.querySelector("a#thumbnail") ||
-    item.querySelector('a[href*="/watch?v="]');
+  // Sponsored cards can contain watch links for the promoted destination, but
+  // they are not organic videos and should not consume a Jev request.
+  if (/\bSponsored\b/i.test(item.textContent || "")) return null;
+
+  const watchLinks = [...item.querySelectorAll('a[href*="/watch?v="]')];
+
+  // YouTube currently renders the duration and title as separate watch links.
+  // Prefer the thumbnail for older layouts, then use any watch link for the id.
+  const link = item.querySelector("a#thumbnail") || watchLinks[0];
 
   const videoId = getVideoId(link);
   if (!videoId) return null;
 
-  // Title lives in #video-title (an <a>). Its `title` attribute usually has the
-  // full, untruncated title; fall back to the visible text.
-  const titleEl = item.querySelector("#video-title");
-  const title =
-    (titleEl && (titleEl.getAttribute("title") || titleEl.textContent)) || "";
+  // Older layouts expose #video-title. Newer rich cards use a second watch
+  // link whose text is the title, while the first watch link is just duration.
+  const titleEl = item.querySelector("#video-title, #video-title-link");
+  const titleLink = watchLinks.find((candidate) => {
+    const text = candidate.textContent.trim();
+    return text && !/^\d{1,2}:\d{2}$/.test(text);
+  });
+  const title = (
+    (titleEl && (titleEl.getAttribute("title") || titleEl.textContent)) ||
+    (titleLink && titleLink.textContent) ||
+    ""
+  ).trim();
 
-  // Channel name is inside ytd-channel-name.
+  // Channel name is inside ytd-channel-name on older layouts. Rich cards use
+  // a channel link such as /@CNNBusiness instead.
   const channelEl = item.querySelector("ytd-channel-name a, ytd-channel-name #text");
-  const channel = (channelEl && channelEl.textContent.trim()) || "";
+  const channelLink = [...item.querySelectorAll('a[href^="/@"]')].find(
+    (candidate) => candidate.textContent.trim()
+  );
+  const channel = (
+    (channelEl && channelEl.textContent) ||
+    (channelLink && channelLink.textContent) ||
+    ""
+  ).trim();
 
   // The description is NOT always rendered (home feed hides it). Grab it when
   // it's there; the background worker can fetch it later if missing.
@@ -123,10 +143,21 @@ function processItem(item) {
     chrome.runtime
       .sendMessage({ type: "classify", payload: video })
       .then((result) => {
+        console.log(
+          "[YT Time Saver] result",
+          video.videoId,
+          result && result.status,
+          "waste:",
+          result && result.waste != null ? result.waste.toFixed(2) : "-",
+          "conf:",
+          result && result.confidence != null ? result.confidence.toFixed(2) : "-",
+          "flagged:",
+          !!(result && result.flagged)
+        );
         if (result && result.flagged) applyFlagged(item, result);
       })
-      .catch(() => {
-        /* message failed; ignore and leave the card untouched. */
+      .catch((err) => {
+        console.warn("[YT Time Saver] classify failed", err);
       })
       .finally(() => {
         item.setAttribute("data-yts-state", "done");
@@ -203,6 +234,7 @@ async function boot() {
     console.warn("[YT Time Saver] disabled or missing API key — not scanning.");
     return;
   }
+  console.log("[YT Time Saver] active — scanning for video cards.");
   start();
 }
 
