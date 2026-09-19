@@ -2,78 +2,193 @@
    content.css  —  Styles injected into the YouTube page
    --------------------------------------------------------------------------
    These styles are only applied to elements the content script marks with the
-   class `.yt-time-saver-flagged`. They visually "dull" a video we think is
-   wasting your time and add a small timeout (⏰) badge on the corner.
+   class `.yt-time-saver-flagged`. A calm, opaque shield covers the full card
+   so tempting thumbnails and titles no longer compete for attention.
 
    We use `!important` on a few declarations because YouTube's own CSS is very
    specific and would otherwise override our dimming.
    ========================================================================== */
 
-/* Make the flagged card a positioning context for the badge. */
+/* Preserve YouTube's grid dimensions while the shield covers the whole card. */
 .yt-time-saver-flagged {
   position: relative !important;
+  isolation: isolate !important;
 }
 
-/* -------------------------------------------------------------------------
-   Dimming: aggressively fade + desaturate the thumbnail so the video
-   visually recedes. We target the thumbnail host element directly.
-   ------------------------------------------------------------------------- */
-.yt-time-saver-flagged ytd-thumbnail {
-  opacity: 0.22 !important;
-  filter: grayscale(0.85) brightness(0.55) !important;
-  transition: opacity 0.25s ease, filter 0.25s ease !important;
-}
-
-/* Some feeds render the actual image with inline styles; force it dim too. */
-.yt-time-saver-flagged ytd-thumbnail img,
-.yt-time-saver-flagged ytd-thumbnail .yt-img-shadow {
-  opacity: 0.85 !important;
-  filter: grayscale(0.7) !important;
-}
-
-/* Optional hover: let the user peek at a slightly brighter thumbnail when
-   they hover, so they can still decide to click if they want. */
-.yt-time-saver-flagged:hover ytd-thumbnail {
-  opacity: 0.55 !important;
-  filter: grayscale(0.45) brightness(0.75) !important;
-}
-
-/* -------------------------------------------------------------------------
-   The timeout badge pinned to the top-right corner of the card.
-   A red ring on a dark disc echoes a "stop / out of time" indicator.
-   ------------------------------------------------------------------------- */
-.yt-time-saver-badge {
+/* The high z-index keeps the shield above YouTube's menus and thumbnail UI. */
+.yt-time-saver-shield {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2147483647; /* max safe z-index so it floats above everything */
-  font-size: 26px;
-  line-height: 1;
-  background: rgba(0, 0, 0, 0.82);
-  border: 2.5px solid #ff3b30;
-  border-radius: 50%;
-  padding: 6px 6px 4px 6px; /* slight offset so the emoji sits centred */
-  color: #fff;
-  cursor: help;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 168px;
+  padding: 24px;
+  overflow: hidden;
+  color: #f1f1f1;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(70, 28, 28, 0.32), transparent 48%),
+    rgba(15, 15, 15, 0.97);
+  border: 1px solid rgba(255, 78, 68, 0.68);
+  border-radius: 12px;
+  box-sizing: border-box;
+  box-shadow: inset 0 3px 0 rgba(255, 59, 48, 0.9);
   user-select: none;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  animation: yt-time-saver-pulse 2s ease-in-out infinite;
+  cursor: default;
 }
 
-/* Subtle pulse on the badge so it catches the eye without being annoying. */
-@keyframes yt-time-saver-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.08); }
+/* A CSS clock stays crisp and avoids a visually noisy emoji. */
+.yt-time-saver-clock {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: 3px solid #ff4e44;
+  border-radius: 50%;
+  box-sizing: border-box;
+  box-shadow: 0 0 0 5px rgba(255, 78, 68, 0.12);
+}
+
+.yt-time-saver-clock::before,
+.yt-time-saver-clock::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  width: 2px;
+  background: #f1f1f1;
+  border-radius: 2px;
+  transform-origin: 50% 100%;
+}
+
+.yt-time-saver-clock::before {
+  height: 12px;
+  transform: translateX(-50%) rotate(0deg);
+}
+
+.yt-time-saver-clock::after {
+  height: 15px;
+  transform: translateX(-50%) rotate(120deg);
+}
+
+.yt-time-saver-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 280px;
+}
+
+.yt-time-saver-label {
+  color: #ff817a;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+}
+
+.yt-time-saver-title {
+  color: #fff;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.yt-time-saver-explanation {
+  color: #aaa;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.yt-time-saver-reveal {
+  min-width: 116px;
+  min-height: 40px;
+  padding: 0 16px;
+  color: #f1f1f1;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  background: #272727;
+  border: 1px solid #5f5f5f;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background-color 140ms ease-out, border-color 140ms ease-out;
+}
+
+.yt-time-saver-reveal:hover {
+  background: #3a3a3a;
+  border-color: #8a8a8a;
+}
+
+.yt-time-saver-reveal:active {
+  background: #1f1f1f;
+}
+
+.yt-time-saver-reveal:focus-visible {
+  outline: 3px solid #3ea6ff;
+  outline-offset: 3px;
 }
 
 /* -------------------------------------------------------------------------
-   Compact sidebar cards are smaller; scale the badge down so it doesn't
-   cover the whole thumbnail.
+   Compact sidebar cards need the same decision in a shorter horizontal form.
    ------------------------------------------------------------------------- */
-ytd-compact-video-renderer.yt-time-saver-flagged .yt-time-saver-badge {
-  font-size: 18px;
-  padding: 4px 4px 2px 4px;
-  top: 4px;
-  right: 4px;
+ytd-compact-video-renderer.yt-time-saver-flagged .yt-time-saver-shield {
+  flex-direction: row;
+  gap: 10px;
+  min-height: 94px;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+ytd-compact-video-renderer .yt-time-saver-clock {
+  width: 30px;
+  height: 30px;
+  border-width: 2px;
+  box-shadow: 0 0 0 3px rgba(255, 78, 68, 0.12);
+}
+
+ytd-compact-video-renderer .yt-time-saver-clock::before {
+  height: 8px;
+}
+
+ytd-compact-video-renderer .yt-time-saver-clock::after {
+  height: 10px;
+}
+
+ytd-compact-video-renderer .yt-time-saver-copy {
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+
+ytd-compact-video-renderer .yt-time-saver-label,
+ytd-compact-video-renderer .yt-time-saver-explanation {
+  display: none;
+}
+
+ytd-compact-video-renderer .yt-time-saver-title {
+  font-size: 13px;
+}
+
+ytd-compact-video-renderer .yt-time-saver-reveal {
+  min-width: 94px;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yt-time-saver-reveal {
+    transition: none;
+  }
 }

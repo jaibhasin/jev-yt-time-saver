@@ -7,8 +7,8 @@
 //   1. Find every "video card" on the page (home feed, search, subscriptions).
 //   2. Read the visible text: title, channel, and description (when present).
 //   3. Send each card to the background worker for classification.
-//   4. When the worker says a video is a likely time-waster, dim the
-//      thumbnail and drop a small "timeout" (⏰) badge on it.
+//   4. When the worker says a video is a likely time-waster, cover the whole
+//      card with a shield that the user can intentionally reveal.
 //
 // YouTube loads videos lazily as you scroll, so we watch the DOM with a
 // MutationObserver and re-scan whenever new cards appear.
@@ -35,6 +35,10 @@ let isActive = false;
 const LIMIT_QUEUE = 6;
 let activeJobs = 0;
 const pendingJobs = [];
+
+// Reveals last for the life of this YouTube tab. This prevents a card from
+// being covered again when YouTube recycles or re-renders its DOM nodes.
+const revealedVideoIds = new Set();
 
 // ---------------------------------------------------------------------------
 // Extraction: pull title / channel / description out of a video card
@@ -103,24 +107,75 @@ function extractVideo(item) {
 }
 
 // ---------------------------------------------------------------------------
-// Visual treatment: dim the card and add the timeout badge
+// Visual treatment: cover the complete card with a revealable shield
 // ---------------------------------------------------------------------------
 
 /** Apply the "this is a time-waster" look once a verdict comes back. */
-function applyFlagged(item, result) {
+function applyFlagged(item, result, videoId) {
+  if (revealedVideoIds.has(videoId)) return;
+
   item.classList.add("yt-time-saver-flagged");
 
-  // Avoid stacking two badges if we somehow run twice.
-  if (item.querySelector(".yt-time-saver-badge")) return;
+  // Avoid stacking shields if YouTube triggers another scan of the same card.
+  if (item.querySelector(".yt-time-saver-shield")) return;
 
-  const badge = document.createElement("div");
-  badge.className = "yt-time-saver-badge";
-  badge.textContent = "⏰";
-  badge.title =
-    `YT Time Saver: likely a time-waster\n` +
-    `waste score: ${(result.waste * 100).toFixed(0)}%  ` +
+  const shield = document.createElement("div");
+  shield.className = "yt-time-saver-shield";
+  shield.setAttribute("role", "group");
+  shield.setAttribute("aria-label", "Likely time-wasting video hidden");
+
+  const clock = document.createElement("span");
+  clock.className = "yt-time-saver-clock";
+  clock.setAttribute("aria-hidden", "true");
+
+  const copy = document.createElement("div");
+  copy.className = "yt-time-saver-copy";
+
+  const label = document.createElement("span");
+  label.className = "yt-time-saver-label";
+  label.textContent = "YT TIME SAVER";
+
+  const title = document.createElement("strong");
+  title.className = "yt-time-saver-title";
+  title.textContent = "Likely time-waster";
+
+  const explanation = document.createElement("span");
+  explanation.className = "yt-time-saver-explanation";
+  explanation.textContent = "This video looks more distracting than useful.";
+
+  const reveal = document.createElement("button");
+  reveal.className = "yt-time-saver-reveal";
+  reveal.type = "button";
+  reveal.textContent = "Show anyway";
+  reveal.setAttribute("aria-label", "Show this video anyway");
+
+  copy.appendChild(label);
+  copy.appendChild(title);
+  copy.appendChild(explanation);
+  shield.appendChild(clock);
+  shield.appendChild(copy);
+  shield.appendChild(reveal);
+
+  // The shield must block the card links below it. Only the reveal button
+  // removes the cover, making the choice deliberate instead of accidental.
+  shield.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+
+  reveal.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    revealedVideoIds.add(videoId);
+    item.classList.remove("yt-time-saver-flagged");
+    item.setAttribute("data-yts-revealed", "true");
+    shield.remove();
+  });
+
+  shield.title =
+    `Waste score: ${(result.waste * 100).toFixed(0)}% · ` +
     `confidence: ${(result.confidence * 100).toFixed(0)}%`;
-  item.appendChild(badge);
+  item.appendChild(shield);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +209,9 @@ function processItem(item) {
           "flagged:",
           !!(result && result.flagged)
         );
-        if (result && result.flagged) applyFlagged(item, result);
+        if (result && result.flagged) {
+          applyFlagged(item, result, video.videoId);
+        }
       })
       .catch((err) => {
         console.warn("[YT Time Saver] classify failed", err);
