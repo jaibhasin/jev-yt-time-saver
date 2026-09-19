@@ -187,6 +187,31 @@ ytd-compact-video-renderer .yt-time-saver-reveal {
   font-size: 12px;
 }
 
+/* -------------------------------------------------------------------------
+   Shorts lockups are compact, mostly-square cards. Keep the shield sized to
+   the card so it covers the thumbnail without spilling into the grid rows.
+   ------------------------------------------------------------------------- */
+ytd-shorts-lockup-view-model.yt-time-saver-flagged {
+  display: block;
+}
+
+ytd-shorts-lockup-view-model.yt-time-saver-flagged .yt-time-saver-shield {
+  min-height: 0;
+  padding: 16px;
+  border-radius: 12px;
+}
+
+ytd-shorts-lockup-view-model .yt-time-saver-shield .yt-time-saver-copy {
+  max-width: 220px;
+}
+
+ytd-shorts-lockup-view-model .yt-time-saver-reveal {
+  min-width: 104px;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .yt-time-saver-reveal {
     transition: none;

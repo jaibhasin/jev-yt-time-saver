@@ -19,11 +19,18 @@
 //   search results       -> ytd-video-renderer
 //   older grid layouts   -> ytd-grid-video-renderer
 //   watch-page sidebar   -> ytd-compact-video-renderer
+//   Shorts shelf / feed  -> ytd-shorts-lockup-view-model, ytd-reel-video-renderer
+//
+// Shorts cards are nested inside a ytd-rich-item-renderer, so the outer card
+// is scanned first and our "skip nested children" guard (in scan) prevents
+// us from shielding the same video twice.
 const ITEM_SELECTORS = [
   "ytd-rich-item-renderer",
   "ytd-video-renderer",
   "ytd-grid-video-renderer",
   "ytd-compact-video-renderer",
+  "ytd-shorts-lockup-view-model",
+  "ytd-reel-video-renderer",
 ];
 
 // Keep a reference to whether the extension is usable, so we don't spam the
@@ -44,12 +51,20 @@ const revealedVideoIds = new Set();
 // Extraction: pull title / channel / description out of a video card
 // ---------------------------------------------------------------------------
 
-/** Pull the 11-character video id out of a YouTube link (e.g. /watch?v=abc123). */
+/**
+ * Pull the 11-character video id out of a YouTube link.
+ *
+ * Classic videos link like  /watch?v=ABC123  while Shorts link like
+ * /shorts/ABC123. We accept both so a Shorts card is treated exactly the
+ * same as a regular video once we have its id.
+ */
 function getVideoId(anchor) {
   if (!anchor) return null;
   const href = anchor.getAttribute("href") || anchor.href || "";
-  const m = href.match(/[?&]v=([\w-]{11})/);
-  return m ? m[1] : null;
+  const watch = href.match(/[?&]v=([\w-]{11})/);      // /watch?v=VIDEOID
+  if (watch) return watch[1];
+  const shorts = href.match(/\/shorts\/([\w-]{11})/);  // /shorts/VIDEOID
+  return shorts ? shorts[1] : null;
 }
 
 /**
@@ -62,19 +77,31 @@ function extractVideo(item) {
   // they are not organic videos and should not consume a Jev request.
   if (/\bSponsored\b/i.test(item.textContent || "")) return null;
 
+  // Regular videos link through /watch?v=, Shorts link through /shorts/ID.
+  // Collect both so the exact same logic covers Classic cards and Shorts.
   const watchLinks = [...item.querySelectorAll('a[href*="/watch?v="]')];
+  const shortsLinks = [...item.querySelectorAll('a[href^="/shorts/"]')];
+  const allLinks = [...watchLinks, ...shortsLinks];
 
   // YouTube currently renders the duration and title as separate watch links.
-  // Prefer the thumbnail for older layouts, then use any watch link for the id.
-  const link = item.querySelector("a#thumbnail") || watchLinks[0];
+  // Prefer the thumbnail for older layouts, then use any watch/shorts link for
+  // the id (Shorts lockups have no #thumbnail, so we fall back to allLinks[0]).
+  const link = item.querySelector("a#thumbnail") || allLinks[0];
 
   const videoId = getVideoId(link);
   if (!videoId) return null;
 
-  // Older layouts expose #video-title. Newer rich cards use a second watch
-  // link whose text is the title, while the first watch link is just duration.
-  const titleEl = item.querySelector("#video-title, #video-title-link");
-  const titleLink = watchLinks.find((candidate) => {
+  // Titles live in different places. Classic cards use #video-title; the newer
+  // Shorts lockup carries its title inside yt-lockup-metadata-view-model.
+  const titleEl = item.querySelector(
+    "#video-title, #video-title-link, " +
+      "ytd-shorts-lockup-view-model .yt-core-attributed-string, " +
+      "yt-lockup-metadata-view-model .yt-core-attributed-string, " +
+      "yt-lockup-metadata-view-model a"
+  );
+  // A title can also be the text of a watch/shorts link when the card has no
+  // dedicated title element. Exclude the duration-only links (e.g. "12:34").
+  const titleLink = allLinks.find((candidate) => {
     const text = candidate.textContent.trim();
     return text && !/^\d{1,2}:\d{2}$/.test(text);
   });
@@ -101,8 +128,8 @@ function extractVideo(item) {
   const descEl = item.querySelector("#description-text, yt-formatted-string#description-text");
   const description = (descEl && descEl.textContent.trim()) || "";
 
-  if (!title) return null; // no title -> not a real video card we care about.
-
+  // A Shorts lockup can show only a thumbnail with no visible title text. We
+  // still want those protected, so the video id alone is enough to classify.
   return { videoId, title, channel, description };
 }
 
@@ -245,6 +272,22 @@ function scan() {
   for (const item of items) {
     // Skip cards we've already handled (or already saw aren't videos).
     if (item.getAttribute("data-yts-state")) continue;
+
+    // A Shorts lockup or reels renderer can live INSIDE a parent card that we
+    // already queued (e.g. a ytd-rich-item-renderer wrapping a Short). Without
+    // this guard we'd shield the same video twice. Children of an already
+    // processed card are skipped; only the outermost card gets the shield.
+    let ancestor = item.parentElement;
+    let nested = false;
+    while (ancestor) {
+      if (ancestor.getAttribute && ancestor.getAttribute("data-yts-state")) {
+        nested = true;
+        break;
+      }
+      ancestor = ancestor.parentElement;
+    }
+    if (nested) continue;
+
     item.setAttribute("data-yts-state", "queued");
     runItem(item);
   }

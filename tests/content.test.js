@@ -183,3 +183,27 @@ test("repeated results do not stack duplicate shields", () => {
     1
   );
 });
+
+// The helper builds a bare anchor that only reports its href, the way our
+// extraction code reads YouTube's <a> elements.
+function anchorFor(href) {
+  return { getAttribute: (name) => (name === "href" ? href : null) };
+}
+
+test("getVideoId reads a classic /watch?v= link", () => {
+  context.anchor = anchorFor("/watch?v=dQw4w9WgXcQ");
+  const id = vm.runInContext("getVideoId(anchor)", context);
+  assert.equal(id, "dQw4w9WgXcQ");
+});
+
+test("getVideoId reads a Shorts /shorts/ID link", () => {
+  context.anchor = anchorFor("/shorts/dQw4w9WgXcQ");
+  const id = vm.runInContext("getVideoId(anchor)", context);
+  assert.equal(id, "dQw4w9WgXcQ");
+});
+
+test("getVideoId returns null for links without a video id", () => {
+  context.anchor = anchorFor("/@SomeChannel/featured");
+  const id = vm.runInContext("getVideoId(anchor)", context);
+  assert.equal(id, null);
+});
