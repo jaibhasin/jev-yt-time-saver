@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "YT Time Saver",
   "version": "0.1.0",
-  "description": "Detect likely time-wasting YouTube videos and dim them with a timeout icon.",
+  "description": "Cover potentially distracting YouTube videos with help from Jev. Show any video anyway - you choose what to watch.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://api.typesafe.ai/*",
