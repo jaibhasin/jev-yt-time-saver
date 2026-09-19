@@ -33,6 +33,7 @@ const DEFAULTS = {
 // Cache tuning. We keep classifications in chrome.storage.session so they
 // survive service-worker restarts within the same browser session (and are
 // cleared when the browser closes).
+const CLASSIFIER_VERSION = 2;
 const CACHE_MAX_ENTRIES = 600;  // Don't let the cache grow forever.
 const CACHE_TTL_MS = 30 * 60 * 1000; // Re-classify after 30 minutes.
 
@@ -93,34 +94,38 @@ function buildState(video) {
  * them in parallel against the same state — adding more questions barely
  * changes the response time or cost.
  *
- * We split "is this a time-waster?" into three atomic judgments and combine
- * them in code (the "composite scoring" pattern from the TypeSafe docs):
- *   - clickbait  -> is the framing manipulative?  (Noul = yes/no probability)
- *   - slop       -> is it low-effort/recycled/AI filler? (Noul)
- *   - value      -> how much genuine value does it have? (Score 0..3)
+ * We split "is this worth the user's time?" into focused judgments and
+ * combine them in code (the "composite scoring" pattern from the TypeSafe
+ * docs). Usefulness carries most of the weight. The other signals catch
+ * entertaining, addictive, or spammy videos whose titles can look harmless.
  */
 function buildQuestions() {
   return {
-    clickbait: {
-      type: "noul",
-      instructions:
-        "The title uses clickbait, sensationalised, or manipulative framing that oversells the content.",
-    },
-    slop: {
-      type: "noul",
-      instructions:
-        "This is low-effort, repetitive, recycled, or AI-generated filler content (\"slop\") that adds little original value.",
-    },
-    value: {
+    usefulness: {
       type: "score",
       instructions:
-        "How much genuine informative, educational, or original value does this content offer?",
+        "How useful is this video for productive work, education, learning durable knowledge, building a practical skill, or completing a real task? Judge the likely primary viewer payoff from the title, channel, and description. Popularity, production quality, celebrity interest, passive inspiration, and entertainment value do not count as usefulness by themselves.",
       criteria: [
-        "Pure entertainment, fluff, or filler with almost no substance",
-        "Some substance but shallow, generic, or derivative",
-        "Genuinely informative, educational, or thoughtful",
-        "High-quality, in-depth, original, and worth the time",
+        "No meaningful work, education, knowledge, skill-building, or productivity value",
+        "Mostly entertainment, opinion, vague inspiration, or shallow information with only incidental useful value",
+        "Meaningfully informative or practical and likely to teach useful knowledge or help with a task",
+        "Directly actionable, in-depth, or clearly valuable for work, study, skill-building, or productivity",
       ],
+    },
+    entertainment: {
+      type: "noul",
+      instructions:
+        "The video's primary payoff is passive entertainment, celebrity interest, music, comedy, drama, spectacle, gossip, or amusement rather than work, education, learning, knowledge, skill-building, or productivity.",
+    },
+    attentionTrap: {
+      type: "noul",
+      instructions:
+        "The video uses clickbait, outrage, shock, hype, rapid stimulation, or curiosity manipulation to encourage compulsive clicking or prolonged watching.",
+    },
+    spam: {
+      type: "noul",
+      instructions:
+        "The video is low-effort, repetitive, recycled, misleading, mass-produced, or filler content with little substance.",
     },
   };
 }
@@ -128,29 +133,33 @@ function buildQuestions() {
 /**
  * Turn the TypeSafe answers into a single 0..1 "time-waste" score.
  *
- * Weights let you control how much each signal matters. We pick:
- *   - value (inverted): the lower the value, the more it looks like a time-waster.
- *   - clickbait / slop : strong signals that a video is trying to waste time.
+ * Weights let us control how much each signal matters. Low usefulness is the
+ * main signal. Entertainment, attention traps, and spam refine the result.
  *
- * `confidence` comes from the `value` Score answer and tells us how certain
+ * `confidence` comes from the `usefulness` Score answer and tells us how certain
  * Jev is. We use it to avoid acting on guesses (highlighting the docs' lesson:
  * "I don't know" is a useful signal).
  */
 function computeWaste(answers) {
-  const clickbait = answers.clickbait ? answers.clickbait.noul : 0;
-  const slop = answers.slop ? answers.slop.noul : 0;
-
-  const valueAnswer = answers.value;
-  const valueMax = valueAnswer && valueAnswer.legend
-    ? Object.keys(valueAnswer.legend).length - 1
+  const usefulnessAnswer = answers.usefulness;
+  const usefulnessMax = usefulnessAnswer && usefulnessAnswer.legend
+    ? Object.keys(usefulnessAnswer.legend).length - 1
     : 3;
-  const valueScore = valueAnswer ? valueAnswer.score : 0;
-  const lowValue = 1 - valueScore / valueMax; // 0 = great, 1 = worthless.
+  const usefulnessScore = usefulnessAnswer ? usefulnessAnswer.score : 0;
+  const lowUsefulness = 1 - usefulnessScore / usefulnessMax;
+  const entertainment = answers.entertainment ? answers.entertainment.noul : 0;
+  const attentionTrap = answers.attentionTrap ? answers.attentionTrap.noul : 0;
+  const spam = answers.spam ? answers.spam.noul : 0;
 
-  // Weighted blend of the three signals.
-  const waste = lowValue * 0.35 + clickbait * 0.35 + slop * 0.3;
-  const confidence = valueAnswer && valueAnswer.confidence != null
-    ? valueAnswer.confidence
+  // A lack of useful payoff is the main reason to flag a video. The remaining
+  // signals distinguish shallow or addictive consumption from useful content.
+  const waste =
+    lowUsefulness * 0.8 +
+    entertainment * 0.1 +
+    attentionTrap * 0.06 +
+    spam * 0.04;
+  const confidence = usefulnessAnswer && usefulnessAnswer.confidence != null
+    ? usefulnessAnswer.confidence
     : 0.5;
 
   return { waste, confidence };
@@ -215,7 +224,11 @@ async function classify(video) {
   // Short-circuit on a cached verdict so scrolling back doesn't re-call the API.
   const cache = await getCache();
   const cached = cache[video.videoId];
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+  if (
+    cached &&
+    cached.classifierVersion === CLASSIFIER_VERSION &&
+    Date.now() - cached.ts < CACHE_TTL_MS
+  ) {
     return { status: "cache", flagged: cached.flagged, waste: cached.waste, confidence: cached.confidence };
   }
 
@@ -265,12 +278,18 @@ async function classify(video) {
     waste: result.waste,
     confidence: result.confidence,
     flagged,
+    classifierVersion: CLASSIFIER_VERSION,
     ts: Date.now(),
   };
   cache[video.videoId] = entry;
   await setCache(cache);
 
-  return { status: "ok", flagged, waste: result.waste, confidence: result.confidence };
+  return {
+    status: "ok",
+    flagged,
+    waste: result.waste,
+    confidence: result.confidence,
+  };
 }
 
 // ---------------------------------------------------------------------------
