@@ -17,6 +17,7 @@
 // The custom elements YouTube uses for the different video-card surfaces:
 //   home / subscriptions -> ytd-rich-item-renderer
 //   search results       -> ytd-video-renderer
+//   sponsored search results -> ytd-promoted-video-renderer
 //   older grid layouts   -> ytd-grid-video-renderer
 //   watch-page sidebar   -> ytd-compact-video-renderer
 //   Shorts shelf / feed  -> ytd-shorts-lockup-view-model, ytd-reel-video-renderer
@@ -27,6 +28,8 @@
 const ITEM_SELECTORS = [
   "ytd-rich-item-renderer",
   "ytd-video-renderer",
+  "ytd-promoted-video-renderer",
+  "ytd-compact-promoted-video-renderer",
   "ytd-grid-video-renderer",
   "ytd-compact-video-renderer",
   "ytd-shorts-lockup-view-model",
@@ -79,13 +82,9 @@ function getVideoId(anchor) {
 /**
  * Extract the readable details from a single video card.
  * Returns an object { videoId, title, channel, description, duration, searchQuery },
- * or null when the element isn't actually a video (e.g. a channel card or an ad).
+ * or null when the element isn't actually a video (e.g. a channel card).
  */
 function extractVideo(item) {
-  // Sponsored cards can contain watch links for the promoted destination, but
-  // they are not organic videos and should not consume a Jev request.
-  if (/\bSponsored\b/i.test(item.textContent || "")) return null;
-
   // Regular videos link through /watch?v=, Shorts link through /shorts/ID.
   // Collect both so the exact same logic covers Classic cards and Shorts.
   const watchLinks = [...item.querySelectorAll('a[href*="/watch?v="]')];

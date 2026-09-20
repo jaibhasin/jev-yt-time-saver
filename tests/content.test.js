@@ -229,6 +229,50 @@ test("extractVideo includes the duration shown on a home-feed card", () => {
   assert.equal(video.duration, "12:34");
 });
 
+test("extractVideo sends sponsored video cards through the normal classifier path", () => {
+  const thumbnail = {
+    getAttribute: (name) => (name === "href" ? "/watch?v=dQw4w9WgXcQ" : null),
+    textContent: "",
+  };
+  const title = {
+    getAttribute: (name) => (name === "title" ? "Free for students" : null),
+    textContent: "Free for students",
+  };
+  const channel = { textContent: "Gemini Notebook" };
+  const item = {
+    textContent: "Sponsored Free for students Gemini Notebook",
+    querySelector(selector) {
+      if (selector === "a#thumbnail") return thumbnail;
+      if (selector.includes("#video-title")) return title;
+      if (selector.includes("ytd-channel-name")) return channel;
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector.includes('/watch?v=')) return [thumbnail];
+      if (selector.includes('/shorts/')) return [];
+      if (selector.includes('a[href^="/@"]')) return [channel];
+      return [];
+    },
+  };
+
+  context.item = item;
+  const video = vm.runInContext("extractVideo(item)", context);
+
+  assert.equal(video.videoId, "dQw4w9WgXcQ");
+  assert.equal(video.title, "Free for students");
+  assert.equal(video.channel, "Gemini Notebook");
+  assert.equal(video.description, "");
+  assert.equal(video.duration, "");
+  assert.equal(video.searchQuery, "");
+});
+
+test("the scan list includes YouTube sponsored video renderers", () => {
+  const selectors = vm.runInContext("ITEM_SELECTORS", context);
+
+  assert.ok(selectors.includes("ytd-promoted-video-renderer"));
+  assert.ok(selectors.includes("ytd-compact-promoted-video-renderer"));
+});
+
 test("extractVideo includes the active search query on search results", () => {
   const thumbnailForSearch = {
     getAttribute: (name) => (name === "href" ? "/watch?v=dQw4w9WgXcQ" : null),
