@@ -46,6 +46,18 @@ test("classifier asks directly about usefulness and distraction signals", () => 
   assert.equal(questions.usefulness.criteria.length, 4);
 });
 
+test("classifier state includes a video's duration when available", () => {
+  const state = vm.runInContext(
+    'buildState({ title: "A video", channel: "A channel", duration: "12:34", description: "Details" })',
+    context
+  );
+
+  assert.equal(
+    state,
+    "Title: A video\nChannel: A channel\nDuration: 12:34\nDescription: Details"
+  );
+});
+
 test("productive learning content remains below the waste threshold", () => {
   const result = computeWaste({
     usefulness: { score: 3, confidence: 0.92 },

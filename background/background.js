@@ -97,6 +97,7 @@ function buildState(video) {
   const parts = [];
   if (video.title) parts.push(`Title: ${video.title}`);
   if (video.channel) parts.push(`Channel: ${video.channel}`);
+  if (video.duration) parts.push(`Duration: ${video.duration}`);
   if (video.description) parts.push(`Description: ${video.description}`);
   return parts.join("\n");
 }

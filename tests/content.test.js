@@ -190,6 +190,43 @@ function anchorFor(href) {
   return { getAttribute: (name) => (name === "href" ? href : null) };
 }
 
+test("extractVideo includes the duration shown on a home-feed card", () => {
+  const thumbnail = {
+    getAttribute: (name) => (name === "href" ? "/watch?v=dQw4w9WgXcQ" : null),
+    textContent: "12:34",
+  };
+  const title = {
+    getAttribute: (name) => (name === "title" ? "A useful video" : null),
+    textContent: "A useful video",
+  };
+  const channel = { textContent: "A channel" };
+  const duration = { textContent: "12:34" };
+  const item = {
+    textContent: "A useful video A channel 12:34",
+    querySelector(selector) {
+      if (selector === "a#thumbnail") return thumbnail;
+      if (selector.includes("#video-title")) return title;
+      if (selector.includes("ytd-channel-name")) return channel;
+      if (selector.includes("#description-text")) return null;
+      if (selector.includes("ytd-thumbnail-overlay-time-status-renderer")) {
+        return duration;
+      }
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector.includes('/watch?v=')) return [thumbnail];
+      if (selector.includes('/shorts/')) return [];
+      if (selector.includes('a[href^="/@"]')) return [channel];
+      return [];
+    },
+  };
+
+  context.item = item;
+  const video = vm.runInContext("extractVideo(item)", context);
+
+  assert.equal(video.duration, "12:34");
+});
+
 test("getVideoId reads a classic /watch?v= link", () => {
   context.anchor = anchorFor("/watch?v=dQw4w9WgXcQ");
   const id = vm.runInContext("getVideoId(anchor)", context);

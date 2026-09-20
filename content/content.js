@@ -69,7 +69,7 @@ function getVideoId(anchor) {
 
 /**
  * Extract the readable details from a single video card.
- * Returns an object { videoId, title, channel, description }, or null when
+ * Returns an object { videoId, title, channel, description, duration }, or null when
  * the element isn't actually a video (e.g. a channel card or an ad).
  */
 function extractVideo(item) {
@@ -103,7 +103,7 @@ function extractVideo(item) {
   // dedicated title element. Exclude the duration-only links (e.g. "12:34").
   const titleLink = allLinks.find((candidate) => {
     const text = candidate.textContent.trim();
-    return text && !/^\d{1,2}:\d{2}$/.test(text);
+    return text && !/^\d{1,2}:\d{2}(?::\d{2})?$/.test(text);
   });
   const title = (
     (titleEl && (titleEl.getAttribute("title") || titleEl.textContent)) ||
@@ -123,6 +123,16 @@ function extractVideo(item) {
     ""
   ).trim();
 
+  // Home-feed cards render the duration over the thumbnail. Shorts usually do
+  // not have one, so an empty duration is expected there.
+  const durationEl = item.querySelector(
+    "ytd-thumbnail-overlay-time-status-renderer #text, " +
+      "ytd-thumbnail-overlay-time-status-renderer yt-formatted-string, " +
+      "badge-shape .yt-badge-shape__text, " +
+      ".badge-shape-wiz__text"
+  );
+  const duration = (durationEl && durationEl.textContent.trim()) || "";
+
   // The description is NOT always rendered (home feed hides it). Grab it when
   // it's there; the background worker can fetch it later if missing.
   const descEl = item.querySelector("#description-text, yt-formatted-string#description-text");
@@ -130,7 +140,7 @@ function extractVideo(item) {
 
   // A Shorts lockup can show only a thumbnail with no visible title text. We
   // still want those protected, so the video id alone is enough to classify.
-  return { videoId, title, channel, description };
+  return { videoId, title, channel, description, duration };
 }
 
 // ---------------------------------------------------------------------------
