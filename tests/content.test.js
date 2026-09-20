@@ -116,6 +116,8 @@ const context = vm.createContext({
     createElement: (tagName) => new FakeElement(tagName),
     querySelectorAll: () => [],
   },
+  URLSearchParams,
+  window: { location: { pathname: "/", search: "" } },
   MutationObserver: class {
     observe() {}
   },
@@ -225,6 +227,42 @@ test("extractVideo includes the duration shown on a home-feed card", () => {
   const video = vm.runInContext("extractVideo(item)", context);
 
   assert.equal(video.duration, "12:34");
+});
+
+test("extractVideo includes the active search query on search results", () => {
+  const thumbnailForSearch = {
+    getAttribute: (name) => (name === "href" ? "/watch?v=dQw4w9WgXcQ" : null),
+    textContent: "",
+  };
+  const titleForSearch = {
+    getAttribute: (name) => (name === "title" ? "A useful video" : null),
+    textContent: "A useful video",
+  };
+  const channelForSearch = { textContent: "A channel" };
+
+  context.window = {
+    location: { pathname: "/results", search: "?search_query=learn+sourdough+bread" },
+  };
+  context.item = {
+    textContent: "A useful video A channel",
+    querySelector(selector) {
+      if (selector === "a#thumbnail") return thumbnailForSearch;
+      if (selector.includes("#video-title")) return titleForSearch;
+      if (selector.includes("ytd-channel-name")) return channelForSearch;
+      if (selector.includes("#description-text")) return null;
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector.includes('/watch?v=')) return [thumbnailForSearch];
+      if (selector.includes('/shorts/')) return [];
+      if (selector.includes('a[href^="/@"]')) return [channelForSearch];
+      return [];
+    },
+  };
+
+  const video = vm.runInContext("extractVideo(item)", context);
+
+  assert.equal(video.searchQuery, "learn sourdough bread");
 });
 
 test("getVideoId reads a classic /watch?v= link", () => {

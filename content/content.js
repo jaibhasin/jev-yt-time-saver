@@ -5,7 +5,7 @@
 // (background.js). It does NOT do the AI work itself. Its jobs are:
 //
 //   1. Find every "video card" on the page (home feed, search, subscriptions).
-//   2. Read the visible text: title, channel, and description (when present).
+//   2. Read the visible text: title, channel, description, duration, and search intent.
 //   3. Send each card to the background worker for classification.
 //   4. When the worker says a video is a likely time-waster, cover the whole
 //      card with a shield that the user can intentionally reveal.
@@ -48,8 +48,17 @@ const pendingJobs = [];
 const revealedVideoIds = new Set();
 
 // ---------------------------------------------------------------------------
-// Extraction: pull title / channel / description out of a video card
+// Extraction: pull video details and search intent out of the page
 // ---------------------------------------------------------------------------
+
+/** Return the user's active YouTube search query, when this is a results page. */
+function getSearchQuery() {
+  if (typeof window === "undefined" || !window.location) return "";
+  if (window.location.pathname !== "/results") return "";
+
+  const params = new URLSearchParams(window.location.search || "");
+  return (params.get("search_query") || "").trim();
+}
 
 /**
  * Pull the 11-character video id out of a YouTube link.
@@ -69,8 +78,8 @@ function getVideoId(anchor) {
 
 /**
  * Extract the readable details from a single video card.
- * Returns an object { videoId, title, channel, description, duration }, or null when
- * the element isn't actually a video (e.g. a channel card or an ad).
+ * Returns an object { videoId, title, channel, description, duration, searchQuery },
+ * or null when the element isn't actually a video (e.g. a channel card or an ad).
  */
 function extractVideo(item) {
   // Sponsored cards can contain watch links for the promoted destination, but
@@ -140,7 +149,7 @@ function extractVideo(item) {
 
   // A Shorts lockup can show only a thumbnail with no visible title text. We
   // still want those protected, so the video id alone is enough to classify.
-  return { videoId, title, channel, description, duration };
+  return { videoId, title, channel, description, duration, searchQuery: getSearchQuery() };
 }
 
 // ---------------------------------------------------------------------------
